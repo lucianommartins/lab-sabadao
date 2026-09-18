@@ -1,0 +1,19 @@
+# Copy this file to access.auto.tfvars and fill in your own principals.
+#
+# access.auto.tfvars is matched by the `**/*.tfvars` rule in .gitignore, so your
+# copy stays local. Terraform loads any *.auto.tfvars automatically, so there is
+# nothing to pass on the command line.
+#
+# iap_members controls who can reach the dashboard through IAP.
+# eval_service_invokers controls who can call the Cloud Run serving service.
+# Both accept the usual IAM principal forms: user:, group:, serviceAccount:,
+# domain:, or allUsers for a genuinely public deployment.
+
+iap_members = [
+  # "user:you@example.com",
+  # "group:your-team@example.com",
+]
+
+eval_service_invokers = [
+  # "serviceAccount:your-runner@your-project.iam.gserviceaccount.com",
+]

@@ -1,0 +1,53 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Skip rather than fail when the deployment is not configured. A fork, or
+    # this repo before the variables below are set, has nothing to deploy to.
+    if: vars.GCP_WIF_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != ''
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+    # Workload Identity Federation Authentication.
+    #
+    # Configure these as repository variables under Settings > Secrets and
+    # variables > Actions > Variables. They identify a specific GCP project and
+    # deploy identity, so they are not committed:
+    #
+    #   GCP_WIF_PROVIDER            projects/PROJECT_NUMBER/locations/global/
+    #                               workloadIdentityPools/POOL/providers/PROVIDER
+    #   GCP_DEPLOY_SERVICE_ACCOUNT  deployer@PROJECT_ID.iam.gserviceaccount.com
+    #   GCP_PROJECT                 PROJECT_ID
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed  # v2.1.13
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f  # v2.2.1
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3.1.2
+      with:
+        terraform_version: "1.8.5"
+
+    - name: Run Deploy Script
+      env:
+        GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      run: |
+        ./deploy.sh
+

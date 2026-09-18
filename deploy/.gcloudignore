@@ -1,0 +1,15 @@
+.git/
+.github/
+.venv/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+ui/node_modules/
+ui/dist/
+/results/
+/models/
+uv.lock
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+

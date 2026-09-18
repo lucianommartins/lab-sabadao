@@ -1,0 +1,68 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# $PROJECT_ID is a built-in Cloud Build substitution, so the image path follows
+# whichever project the build runs in. _LOGS_BUCKET and _DEPLOY_SA are
+# deployment-specific and must be supplied, either on the trigger or with
+# `gcloud builds submit --substitutions`.
+substitutions:
+  _REGION: 'us-central1'
+  _REPO_ID: 'gbench'
+  _LOGS_BUCKET: ''
+  _DEPLOY_SA: ''
+  _TF_STATE_BUCKET: ''
+
+steps:
+  # 1. Build the GBench Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_ID}/gbench-dashboard:latest',
+      '.'
+    ]
+
+  # 2. Push the image to GCP Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args: [
+      'push',
+      '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_ID}/gbench-dashboard:latest'
+    ]
+
+  # 3. Initialize Terraform. main.tf declares a partial GCS backend, so the
+  # state bucket is supplied here rather than committed.
+  - name: 'hashicorp/terraform:1.8.5'
+    id: 'tf-init'
+    dir: 'terraform'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        terraform init -backend-config="bucket=${_TF_STATE_BUCKET}"
+
+  # 4. Apply Terraform changes (deploys to Cloud Run and configures IAP)
+  - name: 'hashicorp/terraform:1.8.5'
+    id: 'tf-apply'
+    dir: 'terraform'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        terraform apply -var="project_id=$PROJECT_ID" -var="deploy_timestamp=$BUILD_ID" -auto-approve
+
+logsBucket: 'gs://${_LOGS_BUCKET}'
+serviceAccount: 'projects/$PROJECT_ID/serviceAccounts/${_DEPLOY_SA}'
+options:
+  logging: GCS_ONLY

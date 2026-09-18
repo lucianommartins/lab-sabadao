@@ -1,0 +1,78 @@
+# Unit tests for gbench itself.
+#
+# These never contact a model. The Golden Set tests stand up a fake
+# in-process endpoint with scripted answers, so the suite is
+# deterministic and safe to require for merge.
+#
+# The Golden Set eval under gbench/golden_dataset/ is deliberately NOT
+# run here. It needs a live model, and its pass rate is a fact about
+# that model rather than about this repo. Running it in CI would let a
+# bad checkpoint in a consumer repo turn this repo's main red, and the
+# eval's real audience would learn to ignore it. See tests/README.md.
+
+name: Unit Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache Virtual Environment
+      id: cache-venv
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}-v2
+
+    - name: Install dependencies
+      if: steps.cache-venv.outputs.cache-hit != 'true'
+      run: |
+        python -m venv .venv
+        .venv/bin/pip install --upgrade pip
+        .venv/bin/pip install pytest pytest-asyncio huggingface-hub datasets Pillow aiohttp pandas pyarrow numpy transformers requests fastapi uvicorn google-cloud-storage google-api-python-client
+        .venv/bin/pip install -e . --no-deps
+
+    - name: Re-install package in editable mode (cache hit)
+      if: steps.cache-venv.outputs.cache-hit == 'true'
+      run: |
+        .venv/bin/pip install -e . --no-deps
+
+    - name: Run unit tests
+      # testpaths in pyproject.toml scopes collection to tests/ and
+      # service/tests/, so nothing under gbench/golden_dataset/ is run.
+      run: |
+        .venv/bin/pytest
+
+  # Single stable check to require in branch protection. Requiring the
+  # matrix legs by name means editing the rule every time the Python
+  # version list changes, and a leg that stops being produced silently
+  # stops being enforced.
+  unit-tests:
+    if: always()
+    needs: pytest
+    runs-on: ubuntu-latest
+    steps:
+    - name: Verify unit tests passed
+      run: |
+        if [ "${{ needs.pytest.result }}" != "success" ]; then
+          echo "Unit tests did not pass: ${{ needs.pytest.result }}"
+          exit 1
+        fi
+        echo "Unit tests passed on all Python versions."

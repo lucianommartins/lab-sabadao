@@ -1,0 +1,26 @@
+gbench
+Copyright 2026 Google LLC
+
+This product includes software developed at Google LLC, licensed under the
+Apache License, Version 2.0 (see the LICENSE file).
+
+==============================================================================
+Bundled media assets
+==============================================================================
+
+The following files ship inside the package (gbench/golden_dataset/assets/) as
+fixed inputs to the Golden Set capability smoketests. They are not benchmark
+datasets (those are fetched at run time from their upstream sources; see
+docs/THIRD_PARTY_DATASETS.md).
+
+* starry_night.png
+    "The Starry Night" (1889) by Vincent van Gogh (1853-1890). Public domain:
+    the work was published in 1889 and its author died in 1890, so it is out of
+    copyright worldwide. Used as the input to the multimodal-vision landmark
+    smoketest (golden_dataset/multimodal_vision_landmark.json).
+
+* tellMeAboutTheSun.wav, what_color_is_cheese.wav
+    Short spoken-phrase clips (~1 s, 16 kHz, 16-bit PCM) used as inputs to the
+    audio-transcription smoketest (golden_dataset/audio_transcription_smoketest.json).
+    Produced by the gbench authors for this purpose and distributed under the
+    repository's Apache-2.0 license.

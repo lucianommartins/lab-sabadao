@@ -1,0 +1,15 @@
+# Local pre-commit hooks. Install once per clone:
+#   pip install pre-commit && pre-commit install
+#
+# The leak gate blocks a commit that adds an internal-identifier or secret pattern. Its generic
+# patterns need no configuration; to also scan the private codename denylist, export
+# GBENCH_LEAK_PATTERNS in your shell (see scripts/check_no_leaks.sh).
+repos:
+  - repo: local
+    hooks:
+      - id: gbench-leak-gate
+        name: gbench leak gate
+        entry: bash scripts/check_no_leaks.sh
+        language: system
+        pass_filenames: false
+        always_run: true

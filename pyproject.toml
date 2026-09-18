@@ -1,0 +1,182 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gbench"
+version = "1.0.0"
+description = "Open model performance benchmarking suite via vLLM"
+authors = [{name = "Luciano Martins", email = "lucianommartins@users.noreply.github.com"}]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["llm", "vllm", "benchmarking", "performance", "gemma"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# The one binding constraint: gbench's models target pydantic v2, so a fresh resolve must not land
+# on v1 (or a future v3). The other cores are left unpinned; uv.lock provides exact reproducibility.
+dependencies = [
+    "pandas",
+    "pyarrow",
+    "numpy",
+    "huggingface-hub",
+    "datasets",
+    "requests",
+    "pydantic>=2,<3",
+    "Pillow",
+    "aiohttp",
+]
+
+[project.optional-dependencies]
+# The serving stack (vllm / transformers / torch) is intentionally NOT installed by gbench. It is
+# hardware- and CUDA-specific and is often a custom/validated build, so auto-installing it would
+# overwrite a provisioned environment or pull a mismatched CUDA on a fresh one. Provision it yourself
+# (a plain `pip install vllm` on a fresh machine pulls a matching torch/CUDA; or use your validated
+# build). gbench requires it only for LOCAL serving (a run without --remote-endpoint) and hard-errors
+# (require_vllm_engine) at run time if it is missing; runs against --remote-endpoint need neither vllm
+# nor torch. This extra is kept (empty) so `pip install gbench[local]` still resolves.
+local = []
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+]
+ui = [
+    "fastapi",
+    "uvicorn",
+    "google-cloud-storage",
+    "google-api-python-client",
+]
+# Extra dependencies required by specific execution-based eval suites. Each suite
+# checks for its dependency at runtime and SKIPS cleanly if it is absent, so this
+# group is optional. Notes:
+#   - coco_caption  -> pycocoevalcap (CIDEr/BLEU/METEOR; also needs a Java runtime)
+#   - swe_bench_live -> the SWE-bench-Live *fork* of swebench, installed from
+#     github.com/SWE-bench-Live/SWE-bench-Live (the PyPI 'swebench' cannot build
+#     SWE-bench-Live test specs); also needs Docker.
+#   - aider_polyglot -> git + pytest + per-language toolchains (Node needed for JS).
+#   - swe_bench_pro / multi_swe_bench -> Docker + the 'docker' SDK; multi_swe_bench
+#     also needs the 'multi-swe-bench' package (both scored by their own harness).
+#   - ojbench -> heavy system deps NOT pip-installable here (ojbench + DMOJ
+#     judge-server from git, PyPy3, g++, 7.85 GB testdata) - see docs/evals/ojbench.md.
+#   - spider2 -> pandas/sqlite (base install) + local gold/DB dirs (see docs).
+evals = [
+    # LLM-judge client (google.genai) - runtime dep for every GEMINI_API_KEY-judged suite
+    # (simpleqa, frames, browsecomp, healthbench, gdpval, putnam, ...); the judge cascade in
+    # base.py imports it. Previously undeclared, so judged suites had no install path.
+    "google-genai",
+    "pycocoevalcap",
+    # PINNED >=4.1,<5: gbench targets swebench v4's layout (validated with 4.1.0). v5.0.0+ removed
+    # `swebench.harness.test_spec.test_spec` (make_test_spec moved to harness.run_evaluation/utils)
+    # AND changed the TestSpec build so make_test_spec raises KeyError: 'image' on SWE-bench_Verified,
+    # so copilot_bench_swe/swe_bench_multilingual/swe_bench_pro cannot build specs on v5. See
+    # docs/evals/swe_bench_multilingual.md.
+    "swebench>=4.1,<5",
+    "pytest",
+    "docker",
+    "multi-swe-bench",
+    # swe_bench_pro_agentic -> mini-swe-agent (imported as `minisweagent`);
+    # runs the per-instance docker rollout. Suite skips cleanly if absent.
+    # PINNED <2: gbench targets v1's layout (minisweagent.config extra/swebench.yaml
+    # + minisweagent.run.extra.swebench.process_instance); v2 (2.4.x) relocated both,
+    # which breaks build_agent_config. A v2 port is tracked separately.
+    "mini-swe-agent<2",
+    # swe_lancer -> its scorer runs `uv run python run_swelancer_eval.py` on the host to launch
+    # the harness, so `uv` must resolve as a CLI. The wheel is a self-contained binary with no
+    # Python deps (Requires-Dist: none), so it never perturbs the pinned stack. NOTE: it installs
+    # into the env's bin, which must be on PATH for the scorer subprocess (or install uv standalone
+    # to ~/.local/bin). The suite hard-errors with an install hint if uv is missing.
+    "uv",
+    # scicode -> reads its test_data.h5 with a VENDORED loader (the scicode package's
+    # dep tree conflicts with gbench's pins), needing only these lightweight libs.
+    "h5py",
+    "scipy",
+    # hmmt (and other competition-math suites) -> canonical symbolic answer equivalence via
+    # math_verify (pulls latex2sympy2_extended + antlr4-python3-runtime). The suite SKIPS
+    # cleanly if absent (math_equiv.require_backend_or_skip) rather than string-matching.
+    "math-verify",
+    # omnidocbench / mrcr edit distance (falls back to stdlib difflib if absent).
+    "rapidfuzz",
+]
+
+# omnidocbench per-modality composite (TEDS for tables + Formula Edit Distance). Optional:
+# without it the suite reports the single global text edit distance. See docs/evals/omnidocbench.md.
+omnidocbench = [
+    "apted",
+    "lxml",
+    "Distance",
+    "pylatexenc",
+    "rapidfuzz",
+]
+
+[project.scripts]
+gbench = "gbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gbench*"]
+
+[tool.setuptools.package-data]
+# The Golden Set is an eval that ships with the tool, so a consumer repo
+# can point --golden-only at its own endpoint. Without this the JSON
+# cases and media assets are left out of the wheel and the runner finds
+# an empty dataset directory.
+gbench = [
+    "golden_dataset/*.json",
+    "golden_dataset/assets/*",
+    # SciCode's 3 supplied sub-steps (context for later steps), vendored Apache-2.0.
+    "runners/eval_suites/scicode_data/*.txt",
+]
+
+[tool.pytest.ini_options]
+# Unit tests only. The Golden Set eval needs a live model and is run with
+# `gbench --golden-only`, never by pytest. See tests/README.md.
+testpaths = ["tests", "service/tests"]
+# Async tests (e.g. the MCP-Atlas search-cascade tests) use `@pytest.mark.asyncio`;
+# auto mode runs any async test without per-test decoration. Requires pytest-asyncio
+# (declared in the `dev` extra - pip install -e .[dev]).
+asyncio_mode = "auto"
+markers = [
+    "slow: tests that download large models or are otherwise slow (deselect with -m 'not slow')",
+]
+
+[tool.ruff]
+line-length = 79
+target-version = "py310"
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming
+    "W",  # pycodestyle warnings
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

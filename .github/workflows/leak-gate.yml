@@ -1,0 +1,30 @@
+# Pre-publish leak gate.
+#
+# Fails the build if any tracked file contains an internal-identifier or secret pattern, so a
+# leak regression can never land on the remote. Separate from test.yml on purpose: this is a
+# policy gate, not a code test, and should read as its own named check in the PR.
+#
+# The generic patterns are baked into scripts/check_no_leaks.sh (safe to ship). The
+# project-specific codename denylist is supplied via the `LEAK_PATTERNS` repository variable
+# (Settings > Secrets and variables > Actions > Variables) so the sensitive names never live in
+# the public tree. With the variable unset the generic scan still runs.
+
+name: Leak Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  leak-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan tracked files for internal identifiers / secrets
+        env:
+          GBENCH_LEAK_PATTERNS: ${{ vars.LEAK_PATTERNS }}
+        run: bash scripts/check_no_leaks.sh

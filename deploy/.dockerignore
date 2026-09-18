@@ -1,0 +1,7 @@
+.git
+.venv
+ui/node_modules
+ui/dist
+results
+*.log
+**/.env
